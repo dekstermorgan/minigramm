@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Миниграм — Система Модерации</title>
+    <style>
+        :root {
+            --bg-color: rgba(14, 22, 33, 0.85);
+            --panel-color: rgba(23, 33, 43, 0.85);
+            --active-color: rgba(36, 48, 63, 0.9);
+            --text-color: #f5f5f5;
+            --hint-color: #708499;
+            --accent-color: #5288c1;
+            
+            /* Стили пузырей сообщений */
+            --my-msg: rgba(43, 82, 120, 0.9);
+            --creator-msg: rgba(108, 92, 231, 0.95); /* Уникальный цвет пузыря Создателя */
+            --other-msg: rgba(24, 37, 51, 0.9);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body, html { width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #000; color: var(--text-color); overflow: hidden; }
+
+        /* Живой фон с дождем */
+        #video-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; pointer-events: none; filter: brightness(0.5); }
+        #app { display: none; flex-direction: column; width: 100%; height: 100%; position: relative; z-index: 1; }
+
+        /* --- ЭКРАН РЕГИСТРАЦИИ --- */
+        #auth-screen { display: flex; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #0e1621; z-index: 500; flex-direction: column; justify-content: center; padding: 30px; overflow-y: auto; }
+        #auth-screen h1 { text-align: center; color: var(--accent-color); margin-bottom: 5px; }
+        #auth-screen p { text-align: center; color: var(--hint-color); margin-bottom: 25px; font-size: 14px; }
+        .auth-form { display: flex; flex-direction: column; gap: 12px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 13px; color: var(--hint-color); }
+        .form-input { width: 100%; background: #17212b; border: 1px solid #2b394a; padding: 11px; color: #fff; border-radius: 8px; font-size: 14px; outline: none; }
+        .file-lbl { background: #2b394a; border: 1px dashed var(--accent-color); padding: 10px; text-align: center; border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .file-lbl span { color: #2ecc71; font-weight: bold; display: none; }
+        .auth-btn { background: var(--accent-color); color: #fff; border: none; padding: 14px; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 5px; }
+
+        /* --- КОРОНА И СТАТУСЫ --- */
+        .crown-badge { display: block; font-size: 13px; color: #f1c40f; font-weight: bold; margin-bottom: 2px; }
+        .role-badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 5px; vertical-align: middle; font-weight: bold; }
+        .role-creator { background: #9b59b6; color: #fff; }
+        .role-admin { background: #f1c40f; color: #000; }
+        .role-helper { background: #e67e22; color: #fff; }
+        .user-status { font-size: 11px; font-weight: bold; margin-left: 5px; }
+        .status-online { color: #2ecc71; }
+        .status-offline { color: #95a5a6; }
+
+        /* --- СТРАНИЦЫ --- */
+        #content-area { flex: 1; width: 100%; position: relative; overflow: hidden; }
+        .page { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; }
+        .page.active { display: flex; }
+
+        /* ЧАТЫ */
+        #chats-header { background: var(--panel-color); padding: 15px 20px; font-weight: bold; font-size: 20px; border-bottom: 1px solid rgba(16, 23, 30, 0.5); backdrop-filter: blur(10px); display: flex; justify-content: space-between; align-items: center; }
+        #chats-list { flex: 1; overflow-y: auto; backdrop-filter: blur(5px); }
+        .chat-item { display: flex; align-items: center; padding: 14px 20px; cursor: pointer; border-bottom: 1px solid rgba(16, 23, 30, 0.3); }
+        .chat-item:active { background: var(--active-color); }
+        
+        .avatar { width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #fff; flex-shrink: 0; background-size: cover; background-position: center; position: relative; }
+        .chat-info { flex: 1; overflow: hidden; }
+        .chat-name-container { display: flex; align-items: center; }
+        .chat-name { font-weight: 500; margin-bottom: 4px; }
+        .chat-last-msg { font-size: 13px; color: var(--hint-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #bg-music-pill { background: var(--accent-color); font-size: 12px; padding: 6px 12px; border-radius: 15px; cursor: pointer; font-weight: 500; }
+
+        /* ДИАЛОГ */
+        #dialog-page { z-index: 10; background: transparent; backdrop-filter: blur(10px); }
+        #dialog-header { background: var(--panel-color); padding: 10px 15px; display: flex; align-items: center; border-bottom: 1px solid rgba(16, 23, 30, 0.5); }
+        .back-btn { background: none; border: none; color: var(--accent-color); font-size: 24px; margin-right: 15px; cursor: pointer; }
+        #messages-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        
+        /* ПУЗЫРИ СООБЩЕНИЙ */
+        .message { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 15px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 2px 5px rgba(0,0,0,0.2); position: relative; }
+        .message.my { background: var(--my-msg); align-self: flex-end; border-bottom-right-radius: 4px; }
+        .message.creator-style { background: var(--creator-msg); align-self: flex-end; border-bottom-right-radius: 4px; border: 1px solid #f1c40f; }
+        .message.other { background: var(--other-msg); align-self: flex-start; border-bottom-left-radius: 4px; }
+        
+        #input-box { background: var(--panel-color); padding: 12px 15px; display: flex; gap: 12px; align-items: center; }
+        #msg-input { flex: 1; background: rgba(14, 22, 33, 0.6); border: none; outline: none; padding: 12px; color: #fff; border-radius: 8px; font-size: 15px; }
+        #send-btn { background: none; border: none; color: var(--accent-color); font-weight: bold; font-size: 16px; cursor: pointer; }
+
+        /* РИЛСЫ */
+        #reels-page { background: #000; z-index: 20; }
+        .reels-container { width: 100%; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; }
+        .reel-block { width: 100%; height: 100%; scroll-snap-align: start; position: relative; display: flex; align-items: center; justify-content: center; }
+        .reel-video { width: 100%; height: 100%; object-fit: cover; }
+        #create-video-btn { position: absolute; top: 15px; right: 15px; background: var(--accent-color); color: #fff; border: none; padding: 10px 15px; border-radius: 20px; font-weight: bold; z-index: 10; }
+        #upload-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(14, 22, 33, 0.98); z-index: 200; padding: 30px 20px; flex-direction: column; gap: 15px; }
+
+        /* ПРОФИЛЬ */
+        #profile-header { background: var(--panel-color); padding: 15px 20px; font-weight: bold; font-size: 20px; border-bottom: 1px solid rgba(16, 23, 30, 0.5); }
+        #profile-content { padding: 30px 20px; display: flex; flex-direction: column; align-items: center; gap: 15px; backdrop-filter: blur(5px); height: 100%; }
+        #user-profile-avatar { width: 100px; height: 100px; border-radius: 50%; background: #555; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.6); }
+        #user-profile-name { font-size: 24px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        #profile-role-tag { font-size: 14px; font-weight: bold; color: #f1c40f; }
+        
+        #music-card { width: 100%; max-width: 320px; background: var(--panel-color); padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 15px; }
+        .music-info { flex: 1; }
+        .music-title { font-weight: bold; font-size: 14px; }
+        #play-profile-music-btn { background: var(--accent-color); border: none; color: white; width: 35px; height: 35px; border-radius: 50%; cursor: pointer; }
+
+        /* Донат-панель */
+        .shop-card { width: 100%; max-width: 320px; background: rgba(30, 42, 58, 0.8); border: 1px solid #2b394a; padding: 15px; border-radius: 12px; margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+        .shop-title { font-weight: bold; font-size: 15px; color: #2ecc71; text-align: center; }
+        .shop-btn { background: #2ecc71; color: #000; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .shop-btn.helper { background: #e67e22; color: #fff; }
+
+        /* Модалка админ-информации о профиле */
+        #info-modal { display: none; position: absolute; top: 20%; left: 5%; width: 90%; background: #17212b; border: 2px solid var(--accent-color); border-radius: 12px; z-index: 600; padding: 20px; flex-direction: column; gap: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.8); }
+
+        /* НАВИГАЦИЯ */
+        #bottom-nav { height: 60px; background: var(--panel-color); border-top: 1px solid rgba(16, 23, 30, 0.5); display: flex; justify-content: space-around; align-items: center; z-index: 100; backdrop-filter: blur(10px); }
+        .nav-item { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: none; border: none; color: var(--hint-color); cursor: pointer; font-size: 12px; gap: 4px; }
+        .nav-item.active { color: var(--accent-color); }
